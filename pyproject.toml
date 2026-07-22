@@ -1,0 +1,50 @@
+[project]
+name = "lga-rcm-yolo"
+version = "1.0.0"
+description = "LGA-RCM-YOLO: Instance segmentation model for transparent chemical glassware and multiphase interface detection in laboratory scenes."
+readme = "README.md"
+requires-python = ">=3.9,<3.10"
+license = { text = "AGPL-3.0" }
+dependencies = [
+  "torch>=2.0.0,<2.5.0",
+  "torchvision>=0.15.0,<0.20.0",
+  "ultralytics==8.3.227",
+  "numpy>=1.24",
+  "pandas",
+  "matplotlib",
+  "seaborn",
+  "tqdm",
+  "timm",
+  "scikit-learn",
+  "opencv-python"
+]
+
+# 可选分组依赖
+[project.optional-dependencies]
+gui = [
+  "pyqt5"
+]
+dev = [
+  "ruff"
+]
+
+[tool.uv]
+# 清华镜像源，国内加速
+[[tool.uv.index]]
+name = "tsinghua"
+url = "https://pypi.tuna.tsinghua.edu.cn/simple"
+default = true
+
+# 代码规范检查格式化
+[tool.ruff]
+line-length = 88
+target-version = "py39"
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "UP", "B"]
+ignore = ["E501"]
+
+[tool.ruff.format]
+quote-style = "double"
+indent-style = "space"
+line-ending = "auto"

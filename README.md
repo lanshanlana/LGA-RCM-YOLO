@@ -1,1 +1,0 @@
-# LGA-RCM-YOLO

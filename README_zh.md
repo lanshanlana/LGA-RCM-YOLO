@@ -1,3 +1,8 @@
+
+## 2. README_zh.md (简体中文)
+```markdown
+> 📖 Switch to [English Version](./README.md)
+
 # LGA-RCM-YOLO
 
 **面向化学实验室场景的定制化 YOLO11 实例分割模型**

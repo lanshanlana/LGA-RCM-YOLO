@@ -1,6 +1,3 @@
-
-## 2. README_zh.md (简体中文)
-```markdown
 > 📖 Switch to [English Version](./README.md)
 
 # LGA-RCM-YOLO

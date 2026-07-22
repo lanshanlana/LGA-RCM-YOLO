@@ -1,0 +1,127 @@
+#!/usr/bin/env python3
+"""
+Plot the height difference between gas-liquid and liquid-liquid interfaces over time.
+Includes automatic separation end detection and a colourful gradient line.
+"""
+import cv2
+import numpy as np
+import matplotlib.pyplot as plt
+from matplotlib.collections import LineCollection
+import matplotlib as mpl
+import argparse
+from ultralytics import YOLO
+
+GAS_LIQUID_ID = 9
+LIQUID_LIQUID_ID = 12
+
+def process_video(video_path, model_path):
+    model = YOLO(model_path)
+    cap = cv2.VideoCapture(video_path)
+    assert cap.isOpened(), f"Cannot open video: {video_path}"
+
+    h = int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
+    fps = cap.get(cv2.CAP_PROP_FPS)
+    times, diffs = [], []
+    frame_idx = 0
+
+    while cap.isOpened():
+        ret, frame = cap.read()
+        if not ret:
+            break
+        results = model(frame, verbose=False)[0]
+
+        gl_y = None
+        ll_ys = []
+        if results.masks is not None:
+            masks = results.masks.data.cpu().numpy()
+            classes = results.boxes.cls.cpu().numpy().astype(int)
+            for mask, cls in zip(masks, classes):
+                ys, _ = np.where(mask > 0)
+                if len(ys) == 0:
+                    continue
+                mean_y = ys.mean()
+                if cls == GAS_LIQUID_ID:
+                    gl_y = mean_y
+                elif cls == LIQUID_LIQUID_ID:
+                    ll_ys.append(mean_y)
+
+        if gl_y is not None and len(ll_ys) > 0:
+            # choose the LL farthest from GL (to avoid picking same interface)
+            ll_y = ll_ys[np.argmax([abs(y - gl_y) for y in ll_ys])]
+            diff = abs((h - gl_y) - (h - ll_y))
+            times.append(frame_idx / fps)
+            diffs.append(diff)
+
+        frame_idx += 1
+
+    cap.release()
+    return np.array(times), np.array(diffs)
+
+def detect_end(time, diff, window_sec=2.0, eps=3.0):
+    for i in range(len(time)):
+        t0 = time[i]
+        idx = np.where((time >= t0) & (time <= t0 + window_sec))[0]
+        if len(idx) < 5:
+            continue
+        if diff[idx].max() - diff[idx].min() < eps:
+            return time[idx[0]], diff[idx[0]]
+    return None, None
+
+def main():
+    parser = argparse.ArgumentParser(description="Plot height difference between interfaces.")
+    parser.add_argument("--video", required=True, help="Input video file.")
+    parser.add_argument("--model", default="best.pt", help="YOLO model weights.")
+    parser.add_argument("--output_dir", default="./plots", help="Directory to save the plot.")
+    parser.add_argument("--output_plot", default=None, help="Output plot filename (default: auto-generated).")
+    parser.add_argument("--window_sec", type=float, default=2.0, help="Window for separation end detection.")
+    parser.add_argument("--eps", type=float, default=3.0, help="Stability threshold in pixels.")
+    args = parser.parse_args()
+
+    os.makedirs(args.output_dir, exist_ok=True)
+    if args.output_plot is None:
+        base = os.path.splitext(os.path.basename(args.video))[0]
+        out_path = os.path.join(args.output_dir, f"{base}_height_diff.png")
+    else:
+        out_path = args.output_plot
+
+    t, d = process_video(args.video, args.model)
+    if t.size == 0:
+        print("No valid interface pairs found.")
+        return
+
+    end_t, end_d = detect_end(t, d, window_sec=args.window_sec, eps=args.eps)
+
+    # Plot with gradient line
+    mpl.rcParams['font.family'] = 'Times New Roman'
+    mpl.rcParams['font.size'] = 14
+    fig, ax = plt.subplots(figsize=(10, 5))
+
+    points = np.array([t, d]).T.reshape(-1, 1, 2)
+    segments = np.concatenate([points[:-1], points[1:]], axis=1)
+    cmap = plt.get_cmap('viridis')
+    norm = plt.Normalize(t.min(), t.max())
+    lc = LineCollection(segments, cmap=cmap, norm=norm, linewidth=2.5)
+    lc.set_array(t)
+    ax.add_collection(lc)
+
+    if end_t is not None:
+        ax.scatter(end_t, end_d, color='red', s=80, zorder=5, label="Separation End")
+        ax.annotate("Separation End", xy=(end_t, end_d),
+                    xytext=(end_t + 0.5, end_d + 5.0),
+                    arrowprops=dict(facecolor='red', arrowstyle="->", lw=1.5))
+
+    ax.set_xlabel("Time (s)")
+    ax.set_ylabel("Height Difference (pixels)")
+    ax.spines['top'].set_visible(False)
+    ax.spines['right'].set_visible(False)
+    ax.legend(frameon=False)
+    ax.set_xlim(t.min(), t.max())
+    ax.set_ylim(d.min()*0.95, d.max()*1.05)
+
+    plt.tight_layout()
+    plt.savefig(out_path, dpi=300)
+    plt.show()
+    print(f"✅ Plot saved to {out_path}")
+
+if __name__ == "__main__":
+    main()
